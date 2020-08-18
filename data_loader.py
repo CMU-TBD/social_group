@@ -95,6 +95,8 @@ class DataLoader():
         return 
 
     def update_message(self, msg):
+        # Store everything obtained/computed from the datasets into the message
+
         if msg.if_processed_data:
             raise Exception('Data already loaded!')
 

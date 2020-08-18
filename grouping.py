@@ -34,7 +34,7 @@ class Grouping(object):
     def __init__(self, msg, history):
         # Initialization
         # Inputs:
-        # data: class object from data_loader containing the dataset information
+        # msg: message class object (should have data loaded first)
         # history: how many frames to look before the split and merge events
         #          (In this class, it is only used to check if we have complete information of 
         #           the group(s) involved in the split/merge before the action.)
@@ -57,6 +57,7 @@ class Grouping(object):
         return 
 
     def update_message(self, msg):
+        # Store everything computed from grouping into the message
         if msg.if_processed_group:
             raise Exception('Grouping already performed!')
 

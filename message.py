@@ -1,6 +1,9 @@
 import numpy as np
 
 class Message(object):
+    # This class defines a message system that stores information.
+    # These information are needed by all the other codes.
+
     def __init__(self):
         self.clear_message()
         return
