@@ -82,7 +82,8 @@ class Grouping(object):
                       'label_history_threshold': history}
         return
 
-    def _DBScan_grouping(self, labels, properties, standard):
+    @staticmethod
+    def _DBScan_grouping(labels, properties, standard):
         # DBSCAN clustering
         # Inputs:
         # labels: the input labels. This will be destructively updated to 
@@ -113,6 +114,30 @@ class Grouping(object):
                 for i, sub_lb in enumerate(sub_labels):
                     if sub_lb > 0:
                         labels[sub_idxes[i]] = max_label + sub_lb
+        return labels
+
+    @classmethod
+    def grouping(cls, position_array, velocity_array, params):
+        num_people = len(position_array)
+        vel_orientation_array = []
+        vel_magnitude_array = []
+        for [vx, vy] in velocity_array:
+            velocity_magnitude = np.sqrt(vx ** 2 + vy ** 2)
+            if velocity_magnitude < params['velocity_ignore_threshold']:
+                # if too slow, then treated as being stationary
+                vel_orientation_array.append((0.0, 0.0))
+                vel_magnitude_array.append((0.0, 0.0))
+            else:
+                vel_orientation_array.append((vx / velocity_magnitude, vy / velocity_magnitude))
+                vel_magnitude_array.append((0.0, velocity_magnitude)) # Add 0 to fool DBSCAN
+        # grouping in current frame (three passes, each on different criteria)
+        labels = [0] * num_people
+        labels = cls._DBScan_grouping(labels, vel_orientation_array,
+                                  params['orientation_threshold'])
+        labels = cls._DBScan_grouping(labels, vel_magnitude_array,
+                                  params['velocity_threshold'])
+        labels = cls._DBScan_grouping(labels, position_array,
+                                  params['position_threshold'])
         return labels
 
     def _check_history(self, label, frame_idx):
@@ -156,25 +181,7 @@ class Grouping(object):
                 self.video_labels_matrix.append([])
                 continue
 
-            vel_orientation_array = []
-            vel_magnitude_array = []
-            for [vx, vy] in velocity_array:
-                velocity_magnitude = np.sqrt(vx ** 2 + vy ** 2)
-                if velocity_magnitude < self.param['velocity_ignore_threshold']:
-                    # if too slow, then treated as being stationary
-                    vel_orientation_array.append((0.0, 0.0))
-                    vel_magnitude_array.append((0.0, 0.0))
-                else:
-                    vel_orientation_array.append((vx / velocity_magnitude, vy / velocity_magnitude))
-                    vel_magnitude_array.append((0.0, velocity_magnitude)) # Add 0 to fool DBSCAN
-            # grouping in current frame (three passes, each on different criteria)
-            labels = [0] * num_people
-            labels = self._DBScan_grouping(labels, vel_orientation_array,
-                                           self.param['orientation_threshold'])
-            labels = self._DBScan_grouping(labels, vel_magnitude_array,
-                                           self.param['velocity_threshold'])
-            labels = self._DBScan_grouping(labels, position_array,
-                                           self.param['position_threshold'])
+            labels = self.grouping(position_array, velocity_array, self.param)
 
             # Check temporal consistency (cross frame comparison)
             if i == 0:

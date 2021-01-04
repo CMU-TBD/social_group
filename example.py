@@ -4,9 +4,10 @@ from message import Message
 from data_loader import DataLoader
 from grouping import Grouping
 from group_shape_generation import GroupShapeGeneration
+from img_process import DrawGroupShape
 
 dataset = 'ucy'
-dataset_idx = 1
+dataset_idx = 0
 history = 16
 frame_idx = 500
 group_idx = 20
@@ -30,12 +31,13 @@ print(msg.video_labels_matrix[frame_idx])
 
 # Initialize group shape generation
 gs_gen = GroupShapeGeneration(msg)
-vertices, pedidx = gs_gen.generate_group_shape(frame_idx, group_idx, None)
+vertices, pedidx = gs_gen.generate_group_shape(frame_idx, group_idx)
 # The returned vertices for the group shape
 print(vertices)
 print(pedidx)
 
 # We can also draw it on an image (blank canvas in this case)
 canvas = np.zeros((msg.frame_height, msg.frame_width, 3), dtype=np.uint8)
-canvas, pedidx = gs_gen.generate_group_shape(frame_idx, group_idx, canvas)
+dgs = DrawGroupShape(msg)
+canvas = dgs.draw_group_shape(vertices, canvas)
 cv2.imwrite('example.jpg', canvas)

@@ -21,10 +21,6 @@ class GroupShapeGeneration(object):
         # msg: message class object (should have data loaded first)
 
         if msg.if_processed_data:
-            self.H = msg.H
-            self.dataset = msg.dataset
-            self.frame_width = msg.frame_width
-            self.frame_height = msg.frame_height
             self.video_position_matrix = msg.video_position_matrix
             self.video_velocity_matrix = msg.video_velocity_matrix
             self.video_pedidx_matrix = msg.video_pedidx_matrix
@@ -58,23 +54,9 @@ class GroupShapeGeneration(object):
                 velocities.append(self.video_velocity_matrix[frame_idx][i])
                 pedidx.append(self.video_pedidx_matrix[frame_idx][i])
         return positions, velocities, pedidx
-
-    def _coordinate_transform(self, coord):
-        # Transform the coordinates from metric space into pixel space
-        # Units are now pixels instead of meters after the transformation.
-
-        pt = np.matmul(np.linalg.inv(self.H), [[coord[0]], [coord[1]], [1.0]])
-        x = pt[0][0] / pt[2][0]
-        y = pt[1][0] / pt[2][0]
-        if self.dataset == 'ucy':
-            tmp_y = y
-            y = self.frame_width / 2 + x
-            x = self.frame_height / 2 - tmp_y
-        x = int(round(x))
-        y = int(round(y))
-        return x, y
-
-    def _draw_social_shapes(self, position, velocity, frame):
+    
+    @staticmethod
+    def draw_social_shapes(position, velocity):
         # This function draws social group shapes
         # given the positions and velocities of the pedestrians.
 
@@ -132,16 +114,9 @@ class GroupShapeGeneration(object):
             hull_vertice = (contour_points[i][0], contour_points[i][1])
             convex_hull_vertices.append(hull_vertice)
 
-        if frame is None:
-            return convex_hull_vertices
-        else:
-            for i, elem in enumerate(convex_hull_vertices):
-                x, y = self._coordinate_transform(elem)
-                convex_hull_vertices[i] = (y, x)
-            cv2.fillConvexPoly(frame, np.array(convex_hull_vertices), (255, 255, 255))
-            return frame
+        return convex_hull_vertices
 
-    def generate_group_shape(self, frame_idx, group_label, frame=None):
+    def generate_group_shape(self, frame_idx, group_label):
         # Method that generates group shape
         # Inputs
         # frame_idx: frame number
@@ -158,9 +133,5 @@ class GroupShapeGeneration(object):
         positions, velocities, pedidx = self._find_label_properties(frame_idx, group_label)
         if len(positions) == 0:
             raise Exception('Group does not exist in the given frame!')
-        if frame is None:
-            vertices = self._draw_social_shapes(positions, velocities, None)
-            return vertices, pedidx
-        else:
-            frame = self._draw_social_shapes(positions, velocities, frame)
-            return frame, pedidx
+        vertices = self.draw_social_shapes(positions, velocities)
+        return vertices, pedidx
