@@ -4,6 +4,8 @@ from scipy.spatial import ConvexHull
 from scipy.stats import norm
 from scipy.stats import truncnorm
 
+from matplotlib import pyplot as plt
+
 class GroupShapeGeneration(object):
 
     # This class takes the information from grouping and
@@ -30,6 +32,11 @@ class GroupShapeGeneration(object):
             self.video_labels_matrix = msg.video_labels_matrix
         else:
             raise Exception('Grouping has not been performed!')
+
+        if (msg.dataset == 'ucy') and (msg.flag == 2):
+            self.const = 0.25
+        else:
+            self.const = 0.35
         return
 
     def _find_label_properties(self, frame_idx, label):
@@ -56,7 +63,7 @@ class GroupShapeGeneration(object):
         return positions, velocities, pedidx
     
     @staticmethod
-    def draw_social_shapes(position, velocity):
+    def draw_social_shapes(position, velocity, const):
         # This function draws social group shapes
         # given the positions and velocities of the pedestrians.
 
@@ -64,10 +71,10 @@ class GroupShapeGeneration(object):
         front_coeff = 1.0
         side_coeff = 2.0 / 3.0
         rear_coeff = 0.5
+        safety_dist = 0.5
         total_increments = 20 # controls the resolution of the blobs
         quater_increments = total_increments / 4
         angle_increment = 2 * np.pi / total_increments
-        current_target = 0.8
 
         # Draw a personal space for each pedestrian within the group
         contour_points = []
@@ -86,26 +93,31 @@ class GroupShapeGeneration(object):
             # Draw four quater-ovals with the axis determined by front, side and rear "variances"
             # The overall shape contour does not have discontinuities.
             for j in range(total_increments):
-                if (j / quater_increments) == 0:
+                if (j // quater_increments) == 0:
                     prev_variance = variance_front
                     next_variance = variance_side
-                elif (j / quater_increments) == 1:
+                elif (j // quater_increments) == 1:
                     prev_variance = variance_rear
                     next_variance = variance_side
-                elif (j / quater_increments) == 2:
+                elif (j // quater_increments) == 2:
                     prev_variance = variance_rear
                     next_variance = variance_side
                 else:
                     prev_variance = variance_front
                     next_variance = variance_side
-                current_variance = prev_variance + (next_variance - prev_variance) * \
-                                   (j % quater_increments) / float(quater_increments)
-                value = np.sqrt(0.354163 / ((np.cos(angle_increment * j) ** 2 / (2 * prev_variance)) + (np.sin(angle_increment * j) ** 2 / (2 * next_variance))))
+                value = np.sqrt(const / ((np.cos(angle_increment * j) ** 2 / (2 * prev_variance)) + (np.sin(angle_increment * j) ** 2 / (2 * next_variance))))
+                value = max(safety_dist, value)
+                #value = 0.5
 
                 addition_angle = velocity_angle + angle_increment * j
                 x = center_x + np.cos(addition_angle) * value
                 y = center_y + np.sin(addition_angle) * value
                 contour_points.append((x, y))
+
+        #plt.scatter(np.array(contour_points)[:, 0], np.array(contour_points)[:, 1])
+        #plt.gca().set_aspect('equal', adjustable='box')
+        #plt.draw()
+        #plt.show()
 
         # Get the convex hull of all the personal spaces
         convex_hull_vertices = []
@@ -133,5 +145,5 @@ class GroupShapeGeneration(object):
         positions, velocities, pedidx = self._find_label_properties(frame_idx, group_label)
         if len(positions) == 0:
             raise Exception('Group does not exist in the given frame!')
-        vertices = self.draw_social_shapes(positions, velocities)
-        return vertices, pedidx
+        vertices = self.draw_social_shapes(positions, velocities, self.const)
+        return vertices, (positions, velocities, pedidx)

@@ -22,31 +22,33 @@ class DataLoader():
     # ---If using frame centered format: 
     # ---(indices are matched - the ith frame is the same frame 
     # ---                       and the jth person is the same person)
+    # ---They are not really matrices but it's just a legacy naming problem...
     # ------video_position_matrix: A 3D irregular list
     # ------                       1st Dimension indicates frames
     # ------                       2nd Dimension indicates people
     # ------                       3rd Dimension indicates coordinates of each person
     # ------                       (video_position_matrix[i][j][0] means the x coordinate
-    # ------                        of preson j in frame i)
+    # ------                        of person j in frame i)
     # ------video_velocity_matrix: A 3D irregular list
     # ------                       1st Dimension indicates frames
     # ------                       2nd Dimension indicates people
     # ------                       3rd Dimension indicates velocities of each person
     # ------                       (video_velocity_matrix[i][j][0] means the x velocity
-    # ------                        of preson j in frame i)
+    # ------                        of person j in frame i)
     # ------video_pedidx_matrix: A 3D irregular list
     # ------                     1st Dimension indicates frames
     # ------                     2nd Dimension indicates pedestrian_id
     # ------                     (video_pedidx_matrix[i][j] means the index id
-    # ------                      of preson j in frame i)
+    # ------                      of person j in frame i)
     #
 
-    def __init__(self, dataset = 'eth', flag = 0):
+    def __init__(self, dataset = 'eth', flag = 0, target_fps = 15):
         # Initialize data processor
         # Inputs:
         # dataset: can only be 'eth' or 'ucy'
         # flag: can only be 0 or 1 for 'eth'
         #       and 0-5 for 'ucy'
+        # target_fps: desired fps for the labels
         #
         # dataset - flag       dataset name
         # eth - 0              ETH
@@ -79,8 +81,10 @@ class DataLoader():
         self.H = []
 
         if dataset == 'eth':
+            in_fps = 15
             read_success = self._read_eth_data(flag)
         elif dataset == 'ucy':
+            in_fps = 25
             read_success = self._read_ucy_data(flag)
         else:
             print('dataset argument must be \'eth\' or \'ucy\'')
@@ -88,6 +92,8 @@ class DataLoader():
         
         if read_success:
             self._organize_frame()
+            if not (in_fps == target_fps):
+                self._frame_matching(in_fps, target_fps)
             self._data_processing()
         else:
             raise Exception('Wrong inputs to the data loader!')
@@ -97,8 +103,8 @@ class DataLoader():
     def update_message(self, msg):
         # Store everything obtained/computed from the datasets into the message
 
-        if msg.if_processed_data:
-            raise Exception('Data already loaded!')
+        #if msg.if_processed_data:
+        #    raise Exception('Data already loaded!')
 
         msg.if_processed_data = True
         msg.dataset = self.dataset
@@ -199,7 +205,7 @@ class DataLoader():
 
         f.close()
 
-        print('File reading done!')
+        #print('File reading done!')
         return True
 
     def _read_ucy_data(self, flag):
@@ -309,8 +315,8 @@ class DataLoader():
                 # obtained by linear interpolation
                 vx = (x - mem_x) / (frame_id - mem_frame_id)
                 vy = (y - mem_y) / (frame_id - mem_frame_id)
-                self.vx_list.append(vx * 60)
-                self.vy_list.append(vy * 60)
+                self.vx_list.append(vx * 25)
+                self.vy_list.append(vy * 25)
               else:
                 record_switch = True
               mem_x = x
@@ -324,7 +330,7 @@ class DataLoader():
 
         f.close()
 
-        print('File reading done!')
+        #print('File reading done!')
         return True
 
     def _organize_frame(self):
@@ -378,7 +384,50 @@ class DataLoader():
         if self.total_num_frames == -1:
             self.total_num_frames = max(self.people_end_frame)
 
-        print('Frame organizing done!')
+        #print('Frame organizing done!')
+        return
+
+    def _frame_matching(self, in_fps, out_fps):
+        # Converts information stored in people_* arrays
+        # from their original fps to a desired fps
+        # Inputs:
+        # in_fps - the original fps of the dataset labels
+        # out_fps - desired fps to convert to
+
+        total_time = self.total_num_frames / in_fps
+        new_total_frames = int(np.floor(total_time * out_fps))
+        num_people = len(self.people_start_frame)
+        for i in range(num_people):
+            curr_start = self.people_start_frame[i]
+            curr_end = self.people_end_frame[i]
+            # make sure the pedestrian exists in its new start frame and end frame
+            new_start = int(np.ceil(curr_start / in_fps * out_fps))
+            new_end = int(np.floor(curr_end / in_fps * out_fps))
+            new_pos_array = []
+            new_vel_array = []
+            # bilinear interpolation to obtain pos and vel at new frames (timestamps)
+            for j in range(new_start, new_end + 1):
+                timestamp = j / out_fps
+                old_frame_idx = timestamp * in_fps
+                if abs(round(old_frame_idx) - old_frame_idx) < 1e-10:
+                    idx = int(round(old_frame_idx)) - curr_start
+                    new_pos_array.append(self.people_coords_complete[i][idx])
+                    new_vel_array.append(self.people_velocity_complete[i][idx])
+                else:
+                    prev_idx = int(np.floor(old_frame_idx)) - curr_start
+                    next_idx = int(np.ceil(old_frame_idx)) - curr_start
+                    ratio = (old_frame_idx - curr_start) - prev_idx # / 1
+                    new_pos = np.array(self.people_coords_complete[i][prev_idx]) * (1 - ratio) + \
+                              np.array(self.people_coords_complete[i][next_idx]) * ratio
+                    new_vel = np.array(self.people_velocity_complete[i][prev_idx]) * (1 - ratio) + \
+                              np.array(self.people_velocity_complete[i][next_idx]) * ratio
+                    new_pos_array.append((new_pos[0], new_pos[1]))
+                    new_vel_array.append((new_vel[0], new_vel[1]))
+            self.people_start_frame[i] = new_start
+            self.people_end_frame[i] = new_end
+            self.people_coords_complete[i] = new_pos_array
+            self.people_velocity_complete[i] = new_vel_array
+
         return
 
     def _data_processing(self):
@@ -414,6 +463,6 @@ class DataLoader():
                 self.video_velocity_matrix.append([])
                 self.video_pedidx_matrix.append([])
 
-        print('Initial data processing done!')
+        #print('Initial data processing done!')
         return
 

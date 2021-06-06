@@ -40,5 +40,7 @@ Thumbs.db
 
 /__pycache__/*
 /checkpoints/*
+/tmp/*
+/test/*
 *.jpg
 *.npy
